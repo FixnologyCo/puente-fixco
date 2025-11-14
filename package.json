@@ -1,0 +1,31 @@
+{
+  "name": "puente-impresion",
+  "version": "1.0.0",
+  "description": "Puente para impresión térmica RePOS",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "pkg . --out-path dist"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "node-thermal-printer": "^4.4.2"
+  },
+  
+  "devDependencies": {
+    "pkg": "^5.8.1"
+  },
+
+  "bin": "server.js",
+  
+  "pkg": {
+    "targets": [
+      "node18-win-x64",
+      "node18-macos-x64"
+    ],
+    "assets": [],
+    "outputPath": "dist"
+  }
+}
