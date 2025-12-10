@@ -35,35 +35,35 @@ async function build() {
     // 4. TU CÓDIGO DE RCEDIT (Aplicado solo al .exe)
     console.log('🎨 Inyectando metadatos...');
     
-    try {
-        if (fs.existsSync(iconPath)) {
-            // Verificamos que el .exe exista antes de editarlo
-            if (!fs.existsSync(exePath)) {
-                console.warn('⚠️ No encontré el .exe de Windows para editar. (¿Quizás solo se generó el de Mac?)');
-                return;
-            }
+   // 5. Maquillaje final (Icono y Datos)
+    console.log('🎨 Inyectando icono y metadatos...');
 
+    try {
+        // Verificamos que el icono exista antes de intentar inyectarlo
+        if (fs.existsSync(iconPath)) {
             await rcedit(exePath, {
-                 // 'icon': iconPath,
-                // 'version-string': {
-                //     'CompanyName': 'Fixnology Community',
-                //     'FileDescription': 'Puente de Impresión Local',
-                //     'ProductName': 'Fixnology Printer Bridge',
-                //     'OriginalFilename': exeFilename,
-                //     'LegalCopyright': '© 2025 Fixnology'
-                // },
-                // 'product-version': '1.0.0',
-                // 'file-version': '1.0.0'
+                'icon': iconPath,
+                'version-string': {
+                    'CompanyName': 'Fixnology Community',
+                    'FileDescription': 'Puente de Impresión Local',
+                    'LegalCopyright': '© 2025 Fixnology CO.',
+                    'ProductName': 'Fixnology Printer Bridge',
+                    'OriginalFilename': 'PuenteRePOSFixCO.exe'
+                },
+                'file-version': '1.0.0',
+                'product-version': '1.0.0'
             });
-            console.log('✅ ¡LISTO! Icono inyectado correctamente.');
         } else {
-            console.warn(`⚠️ No encontré el icono en: ${iconPath}`);
+            console.warn('⚠️ No se encontró el icono en:', iconPath, '- Se omitió este paso.');
         }
-        
-        console.log('👉 Archivos generados en carpeta /dist');
-        
+
+        // Limpieza final
+        try { fs.rmSync('build_temp', { recursive: true, force: true }); } catch (e) { }
+
+        console.log('✅ ¡ÉXITO TOTAL!');
+        console.log('👉 Tu ejecutable está listo en: ' + exePath);
     } catch (error) {
-        console.error('❌ Error en metadatos (ignorable):', error);
+        console.error('❌ Error al inyectar metadatos (pero el .exe funciona):', error);
     }
 }
 
