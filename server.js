@@ -8,19 +8,31 @@ app.use(cors());
 
 const PORT = 4000;
 
+const getClientIp = (req) => {
+    let ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress || req.socket.remoteAddress;
+    if (ip.substr(0, 7) == "::ffff:") {
+        ip = ip.substr(7);
+    }
+    return ip;
+};
+
 app.get('/health', (req, res) => {
-    console.log('[INFO] Ping recibido desde la Tablet/POS.');
+    const clientIp = getClientIp(req);
+    console.log(`[INFO] Ping recibido desde el Dispositivo/POS. IP: ${clientIp}`);
+    
     res.send({
         success: true,
-        message: '¡Puente de Impresión Conectado y Listo! MELOSOOOOO'
+        message: '¡Puente de Impresión Conectado y Listo!',
+        device_ip: clientIp
     });
 });
 
 app.post('/imprimir-comanda', async (req, res) => {
     const ticket = req.body;
+    const clientIp = getClientIp(req);
 
     console.log('--- ⬇️ DATOS DE COMANDA RECIBIDOS ⬇️ ---');
-    console.log(JSON.stringify(ticket, null, 2));
+    console.log(`Origen: ${clientIp}`);
     console.log('--- ⬆️ FIN DE DATOS DE COMANDA ⬆️ ---');
 
     if (!ticket.ip_impresora) {
@@ -38,71 +50,66 @@ app.post('/imprimir-comanda', async (req, res) => {
     });
 
     try {
-        // 1. Título del Área
+        // 1. Título del Área (Compacto)
         printer.alignCenter();
         printer.bold(true);
-        printer.println(ticket.area_nombre.toUpperCase()); // "COCINA" [cite: 1]
+        printer.println(ticket.area_nombre.toUpperCase()); 
         printer.bold(false);
-        printer.newLine();
+        // Eliminado newLine aquí para ahorrar espacio
 
-        // 2. Título Principal (Mesa / Tipo Orden)
-        // El PDF [cite: 2] muestra "MESA: M-10".
+        // 2. Título Principal (Mesa)
         printer.drawLine();
         printer.setTextSize(2, 2);
         printer.bold(true);
-        printer.println(ticket.mesa.toUpperCase()); // "MESA: M-10" [cite: 2]
+        printer.println(ticket.mesa.toUpperCase());
         printer.setTextSize(1, 1);
         printer.bold(false);
         printer.drawLine();
 
-        // 3. Información de la Orden (Consecutivo, Hora, Mesero) 
+        // 3. Información de la Orden
         const now = new Date();
-
-        // ✅ MODIFICACIÓN: Añadidos segundos para coincidir con "16:48:22" 
         const time = now.toLocaleTimeString('es-CO', {
             hour: '2-digit',
             minute: '2-digit',
             second: '2-digit'
         });
 
+        // Imprime la tabla sin saltos extra antes
         printer.tableCustom([
-            { text: ticket.orden_consecutivo, align: "LEFT", width: 0.40 }, // "#FV-13112025-8"
-            { text: time, align: "CENTER", width: 0.20, style: "B" }, // "16:48:22"
-            { text: ticket.mesero, align: "RIGHT", width: 0.40 } // "Ranses"
+            { text: ticket.orden_consecutivo, align: "LEFT", width: 0.40 },
+            { text: time, align: "CENTER", width: 0.20, style: "B" },
+            { text: ticket.mesero, align: "RIGHT", width: 0.40 }
         ]);
+        
+        // Pequeño espacio antes de los items para que no se pegue al encabezado
+        printer.newLine(); 
 
-        // 4. Divisor (ELIMINADO)
-        // El ticket de muestra [cite: 4, 6] no tiene un divisor aquí
-        printer.newLine();
-        // printer.drawLine(); // <-- ELIMINADO
-
-        // 5. Tabla de Items
+        // 5. Tabla de Items (SUPER COMPACTA)
         for (const item of ticket.items) {
-            // ✅ MODIFICACIÓN: Formato "1x PRODUCTO" [cite: 4, 5, 6, 8]
-            printer.alignLeft(); // Aseguramos alineación
+            printer.alignLeft();
             printer.bold(true);
+            // Imprime el producto
             printer.println(`${item.cantidad}x ${item.nombre.toUpperCase()}`);
             printer.bold(false);
 
-            // ✅ MODIFICACIÓN: Notas "-> " 
+            // Si hay notas, las imprime debajo
             if (item.notas) {
-                printer.alignLeft();
                 printer.println(`  -> ${item.notas}`);
             }
-
-            // ✅ MODIFICACIÓN: Separador "----" ELIMINADO
-            // El ticket de muestra no tiene separadores entre items
-            printer.newLine(); // Dejamos solo un espacio
         }
 
-        // Notas Generales (se mantiene igual)
+        // Notas Generales (con un pequeño separador si existen)
         if (ticket.notas_generales) {
             printer.newLine();
             printer.drawLine();
+            printer.bold(true);
+            printer.println("NOTA GRAL:");
+            printer.bold(false);
             printer.println(ticket.notas_generales);
-            printer.drawLine();
         }
 
+        // Espacio final para poder cortar bien
+        printer.newLine();
         printer.newLine();
         printer.cut();
 
