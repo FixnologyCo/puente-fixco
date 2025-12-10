@@ -19,28 +19,18 @@ const getClientIp = (req) => {
 app.get('/health', (req, res) => {
     const clientIp = getClientIp(req);
     console.log(`[INFO] Ping recibido desde el Dispositivo/POS. IP: ${clientIp}`);
-    
-    res.send({
-        success: true,
-        message: '¡Puente de Impresión Conectado y Listo!',
-        device_ip: clientIp
-    });
+    res.send({ success: true, message: '¡Puente de Impresión Conectado!', device_ip: clientIp });
 });
 
 app.post('/imprimir-comanda', async (req, res) => {
     const ticket = req.body;
     const clientIp = getClientIp(req);
 
-    console.log('--- ⬇️ DATOS DE COMANDA RECIBIDOS ⬇️ ---');
-    console.log(`Origen: ${clientIp}`);
-    console.log('--- ⬆️ FIN DE DATOS DE COMANDA ⬆️ ---');
+    console.log(`[INFO] Imprimiendo para: ${ticket.area_nombre} en IP ${ticket.ip_impresora}`);
 
     if (!ticket.ip_impresora) {
-        console.warn(`[WARN] Se recibió trabajo sin IP para ${ticket.area_nombre}`);
-        return res.status(200).send({ success: true, message: 'Orden recibida, pero esta área no tiene IP de impresora.' });
+        return res.status(200).send({ success: true, message: 'Orden recibida, pero sin IP de impresora.' });
     }
-
-    console.log(`[INFO] Imprimiendo para: ${ticket.area_nombre} en IP ${ticket.ip_impresora}`);
 
     const printer = new ThermalPrinter({
         type: PrinterTypes.EPSON,
@@ -50,72 +40,77 @@ app.post('/imprimir-comanda', async (req, res) => {
     });
 
     try {
-        // 1. Título del Área (Compacto)
+        // --- ENCABEZADO ---
         printer.alignCenter();
-        printer.bold(true);
-        printer.println(ticket.area_nombre.toUpperCase()); 
-        printer.bold(false);
-        // Eliminado newLine aquí para ahorrar espacio
+        // Quitamos negrita al área para que sea más sutil
+        printer.println(ticket.area_nombre.toUpperCase());
 
-        // 2. Título Principal (Mesa)
-        printer.drawLine();
-        printer.setTextSize(2, 2);
+        printer.newLine(); // Espacio
+
+        // Nombre de la MESA en tamaño normal, pero NEGRILLA
         printer.bold(true);
+        // Eliminamos el setTextSize(2,2) para que no sea gigante
         printer.println(ticket.mesa.toUpperCase());
-        printer.setTextSize(1, 1);
         printer.bold(false);
-        printer.drawLine();
 
-        // 3. Información de la Orden
+        printer.newLine(); // Espacio
+        printer.drawLine(); // Una sola línea separadora fina
+
+        // --- INFO (Consecutivo, Hora, Mesero) ---
         const now = new Date();
-        const time = now.toLocaleTimeString('es-CO', {
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit'
+        const time = now.toLocaleTimeString('en-US', {
+            hour: '2-digit', minute: '2-digit', hour12: true
         });
 
-        // Imprime la tabla sin saltos extra antes
-        printer.tableCustom([
-            { text: ticket.orden_consecutivo, align: "LEFT", width: 0.40 },
-            { text: time, align: "CENTER", width: 0.20, style: "B" },
-            { text: ticket.mesero, align: "RIGHT", width: 0.40 }
-        ]);
-        
-        // Pequeño espacio antes de los items para que no se pegue al encabezado
-        printer.newLine(); 
+        printer.bold(true);
+        printer.alignLeft();
+        printer.println(ticket.orden_consecutivo);
 
-        // 5. Tabla de Items (SUPER COMPACTA)
+        printer.bold(true);
+        printer.alignLeft();
+        printer.println(time);
+
+        printer.alignLeft();
+        printer.println(`Solicita: ${ticket.mesero.toUpperCase()}`);
+
+        printer.drawLine(); // Línea separadora antes de los productos
+
+        // --- LISTA DE ITEMS (Estética Mejorada) ---
+        printer.alignLeft();
+
         for (const item of ticket.items) {
-            printer.alignLeft();
+            // MEJORA: Cantidad y Nombre en la MISMA línea
             printer.bold(true);
-            // Imprime el producto
-            printer.println(`${item.cantidad}x ${item.nombre.toUpperCase()}`);
+            printer.println(`${item.cantidad} x ${item.nombre.toUpperCase()}`);
             printer.bold(false);
 
-            // Si hay notas, las imprime debajo
+            // Notas del producto (con indentación simple, sin flechas)
             if (item.notas) {
-                printer.println(`  -> ${item.notas}`);
+                // Agregamos unos espacios al inicio para indentar la nota
+                printer.println(`>  (${item.notas})`);
             }
-        }
 
-        // Notas Generales (con un pequeño separador si existen)
-        if (ticket.notas_generales) {
+            // Usamos un espacio en blanco entre productos en lugar de una línea punteada
+            // para que se vea más limpio.
             printer.newLine();
-            printer.drawLine();
-            printer.bold(true);
-            printer.println("NOTA GRAL:");
-            printer.bold(false);
-            printer.println(ticket.notas_generales);
         }
 
-        // Espacio final para poder cortar bien
-        printer.newLine();
+        // --- NOTAS GENERALES Y PIE DE PÁGINA ---
+        if (ticket.notas_generales) {
+            printer.drawLine(); // Línea antes de notas generales
+            printer.bold(true);
+            printer.println("NOTAS:");
+            printer.bold(false);
+            printer.println(ticket.notas_generales.toUpperCase());
+        } else {
+            // Si no hay notas generales, ponemos una línea final para cerrar el ticket
+            printer.drawLine();
+        }
         printer.newLine();
         printer.cut();
 
         await printer.execute();
-
-        console.log(`[SUCCESS] Ticket ${ticket.orden_consecutivo} enviado a ${ticket.ip_impresora}`);
+        console.log(`[SUCCESS] Ticket enviado a ${ticket.ip_impresora}`);
         res.send({ success: true, message: 'Impresión enviada' });
 
     } catch (error) {
@@ -125,5 +120,5 @@ app.post('/imprimir-comanda', async (req, res) => {
 });
 
 app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Servidor de Impresión (Puente) corriendo en http://0.0.0.0:${PORT}`);
+    console.log(`Servidor de Impresión corriendo en http://0.0.0.0:${PORT}`);
 });
